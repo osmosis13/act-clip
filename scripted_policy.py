@@ -78,27 +78,29 @@ class PickAndTransferPolicy(BasePolicy):
         gripper_pick_quat = Quaternion(init_mocap_pose_right[3:])
         gripper_pick_quat = gripper_pick_quat * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-60)
 
-        meet_left_quat = Quaternion(axis=[1.0, 0.0, 0.0], degrees=90)
+        meet_left_quat = Quaternion(init_mocap_pose_left[3:]) 
+        meet_left_quat = meet_left_quat * Quaternion(axis=[0.0,1.0, 0.0], degrees=60)
 
         meet_xyz = np.array([0, 0.5, 0.25])
 
         self.left_trajectory = [
             {"t": 0, "xyz": init_mocap_pose_left[:3], "quat": init_mocap_pose_left[3:], "gripper": 0}, # sleep
-            {"t": 100, "xyz": meet_xyz + np.array([-0.1, 0, -0.02]), "quat": meet_left_quat.elements, "gripper": 1}, # approach meet position
-            {"t": 260, "xyz": meet_xyz + np.array([0.02, 0, -0.02]), "quat": meet_left_quat.elements, "gripper": 1}, # move to meet position
-            {"t": 310, "xyz": meet_xyz + np.array([0.02, 0, -0.02]), "quat": meet_left_quat.elements, "gripper": 0}, # close gripper
-            {"t": 360, "xyz": meet_xyz + np.array([-0.1, 0, -0.02]), "quat": np.array([1, 0, 0, 0]), "gripper": 0}, # move left
-            {"t": 400, "xyz": meet_xyz + np.array([-0.1, 0, -0.02]), "quat": np.array([1, 0, 0, 0]), "gripper": 0}, # stay
+            {"t": 100, "xyz": meet_xyz + np.array([-0.25, 0, 0.05]), "quat": meet_left_quat.elements, "gripper": 1}, # approach meet position
+            {"t": 200, "xyz": meet_xyz + np.array([-0.25, 0, 0.05]), "quat": meet_left_quat.elements, "gripper": 1}, # wait
+            {"t": 270, "xyz": meet_xyz + np.array([-0.12, 0, -0.01]), "quat": meet_left_quat.elements, "gripper": 1}, # move to meet position
+            {"t": 300, "xyz": meet_xyz + np.array([-0.12, 0, -0.01]), "quat": meet_left_quat.elements, "gripper": 0}, # close gripper
+            {"t": 360, "xyz": meet_xyz + np.array([-0.17, 0, 0.2]), "quat": np.array([1, 0, 0, 0]), "gripper": 0}, # move left
+            {"t": 400, "xyz": meet_xyz + np.array([-0.17, 0, 0.2]), "quat": np.array([1, 0, 0, 0]), "gripper": 0}, # stay
         ]
 
         self.right_trajectory = [
             {"t": 0, "xyz": init_mocap_pose_right[:3], "quat": init_mocap_pose_right[3:], "gripper": 0}, # sleep
             {"t": 90, "xyz": box_xyz + np.array([0, 0, 0.08]), "quat": gripper_pick_quat.elements, "gripper": 1}, # approach the cube
-            {"t": 130, "xyz": box_xyz + np.array([0, 0, -0.015]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
-            {"t": 170, "xyz": box_xyz + np.array([0, 0, -0.015]), "quat": gripper_pick_quat.elements, "gripper": 0}, # close gripper
+            {"t": 130, "xyz": box_xyz + np.array([0, 0, -0.05]), "quat": gripper_pick_quat.elements, "gripper": 1}, # go down
+            {"t": 170, "xyz": box_xyz + np.array([0, 0, -0.05]), "quat": gripper_pick_quat.elements, "gripper": 0}, # close gripper
             {"t": 200, "xyz": meet_xyz + np.array([0.05, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 0}, # approach meet position
             {"t": 220, "xyz": meet_xyz, "quat": gripper_pick_quat.elements, "gripper": 0}, # move to meet position
-            {"t": 310, "xyz": meet_xyz, "quat": gripper_pick_quat.elements, "gripper": 1}, # open gripper
+            {"t": 350, "xyz": meet_xyz, "quat": gripper_pick_quat.elements, "gripper": 1}, # open gripper
             {"t": 360, "xyz": meet_xyz + np.array([0.1, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 1}, # move to right
             {"t": 400, "xyz": meet_xyz + np.array([0.1, 0, 0]), "quat": gripper_pick_quat.elements, "gripper": 1}, # stay
         ]
@@ -148,6 +150,77 @@ class InsertionPolicy(BasePolicy):
 
         ]
 
+class ThrowAndCatchPolicy(BasePolicy):
+    def generate_trajectory(self, ts_first):
+        init_mocap_pose_right = ts_first.observation['mocap_pose_right']
+        init_mocap_pose_left = ts_first.observation['mocap_pose_left']
+
+        box_info = np.array(ts_first.observation['env_state'])
+        box_xyz = box_info[:3]
+        box_quat = box_info[3:]
+        # print(f"Generate trajectory for {box_xyz=}")
+
+        gripper_pick_quat = Quaternion(init_mocap_pose_right[3:])
+        gripper_pick_quat = gripper_pick_quat * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-60)
+
+        # Where the catch should roughly happen (further in +x than before)
+        # You may need to tune these numbers by watching the sim.
+        catch_center = np.array([-0.25, 0.5, 0.25])  # further away in x direction to allow for throwing
+
+        self.left_trajectory = [
+            # stay at initial pose briefly
+            {"t": 0,
+             "xyz": init_mocap_pose_left[:3],
+             "quat": init_mocap_pose_left[3:],
+             "gripper": 1},
+            # move to catch region, gripper open
+            {"t": 120,
+             "xyz": catch_center + np.array([0.0, 0.0, 0.0]),
+             "quat": Quaternion(axis=[1.0, 0.0, 0.0], degrees=90).elements,
+             "gripper": 1},
+            # close a bit after the expected arrival time
+            {"t": 220,
+             "xyz": catch_center + np.array([0.0, 0.0, 0.0]),
+             "quat": Quaternion(axis=[1.0, 0.0, 0.0], degrees=90).elements,
+             "gripper": 0},
+            # hold cube and stay
+            {"t": 400,
+             "xyz": catch_center + np.array([0.0, 0.0, 0.0]),
+             "quat": Quaternion(axis=[1.0, 0.0, 0.0], degrees=90).elements,
+             "gripper": 0},
+        ]
+
+        # A point above the cube to approach from
+        above_cube = box_xyz + np.array([0.0, 0.0, 0.08])
+
+        # Release point somewhere between thrower and catcher, higher in z
+        # so cube has a ballistic arc.
+        release_xyz = box_xyz + np.array([0.15, 0.0, 0.25])
+
+        # Follow‑through point after release (hand keeps moving)
+        follow_through_xyz = box_xyz + np.array([0.3, 0.0, 0.20])
+
+        self.right_trajectory = [
+            # initial rest
+            {"t": 0, "xyz": init_mocap_pose_right[:3], "quat": init_mocap_pose_right[3:], "gripper": 0},
+            # approach above cube
+            {"t": 90, "xyz": box_xyz + np.array([0, 0, 0.08]), "quat": gripper_pick_quat.elements, "gripper": 1},
+            # move down to grasp
+            {"t": 130, "xyz": box_xyz + np.array([0, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 1},
+            # close gripper (grasp cube)
+            {"t": 170, "xyz": box_xyz + np.array([0, 0, -0.03]), "quat": gripper_pick_quat.elements, "gripper": 0},
+            # lift cube up and start swing
+            {"t": 190, "xyz": above_cube, "quat": gripper_pick_quat.elements, "gripper": 0},
+            # accelerate toward release point (the "throw" motion)
+            {"t": 220, "xyz": release_xyz, "quat": gripper_pick_quat.elements, "gripper": 0},
+            # open gripper at high speed to release the cube
+            {"t": 230, "xyz": release_xyz, "quat": gripper_pick_quat.elements, "gripper": 0},
+            # follow through after release
+            {"t": 260, "xyz": follow_through_xyz, "quat": gripper_pick_quat.elements, "gripper": 1},
+            # move away and stay
+            {"t": 400, "xyz": follow_through_xyz, "quat": gripper_pick_quat.elements, "gripper": 1},
+        ]
+
 
 def test_policy(task_name):
     # example rolling out pick_and_transfer policy
@@ -160,6 +233,8 @@ def test_policy(task_name):
         env = make_ee_sim_env('sim_transfer_cube')
     elif 'sim_insertion' in task_name:
         env = make_ee_sim_env('sim_insertion')
+    elif 'sim_throw_and_catch' in task_name:
+        env = make_ee_sim_env('sim_transfer_cube')
     else:
         raise NotImplementedError
 
