@@ -1,31 +1,45 @@
 import pathlib
 
 ### Task parameters
-DATA_DIR = '/home/osmosis13/act/first_test'
+DATA_DIR = '/home/osmosis13/1_MuJoCo-Sim-GIT/first_test'
 SIM_TASK_CONFIGS = {
     'sim_transfer_cube_scripted':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_scripted',
-        'num_episodes': 50,
+        'num_episodes': 44,
         'episode_len': 400,
-        'camera_names': ['top']
+        'camera_names': ['angle', 'right_wrist']
     },
 
     'sim_transfer_cube_human':{
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_human',
         'num_episodes': 50,
         'episode_len': 400,
-        'camera_names': ['top']
+        'camera_names': ['angle', 'right_wrist']
     },
 
     'sim_insertion_scripted': {
         'dataset_dir': DATA_DIR + '/sim_insertion_scripted',
         'num_episodes': 50,
         'episode_len': 400,
-        'camera_names': ['top']
+        'camera_names': ['angle', 'right_wrist']
     },
 
     'sim_insertion_human': {
         'dataset_dir': DATA_DIR + '/sim_insertion_human',
+        'num_episodes': 50,
+        'episode_len': 500,
+        'camera_names': ['angle', 'right_wrist']
+    },
+
+    'sim_throw_and_catch_scripted': {
+        'dataset_dir': DATA_DIR + '/sim_throw_and_catch_scripted',
+        'num_episodes': 50,
+        'episode_len': 400,
+        'camera_names': ['top']
+    },
+
+    'sim_throw_and_catch_human': {
+        'dataset_dir': DATA_DIR + '/sim_throw_and_catch_human',
         'num_episodes': 50,
         'episode_len': 500,
         'camera_names': ['top']
