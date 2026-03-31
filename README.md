@@ -1,4 +1,4 @@
-# ACT: Action Chunking with Transformers
+# ACT-CLIP: Action Chunking Transformer with CLIP implementation
 
 #### This project is based on: https://tonyzhaozh.github.io/aloha/
 
@@ -32,7 +32,10 @@
     pip install packaging
     pip install h5py
     pip install ipython
-    cd MuJoCo-Sim-GIT/detr && pip install -e .
+    pip install ftfy regex tqdm
+    pip install git+https://github.com/openai/CLIP.git
+    pip install sentencepiece
+    cd act-clip/detr && pip install -e .
 
 ### Example Usages
 
