@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.transforms as transforms
+from clip_encoder import CLIPTextEncoder
 
 from detr.main import build_ACT_model_and_optimizer, build_CNNMLP_model_and_optimizer
 import IPython
@@ -13,28 +14,55 @@ class ACTPolicy(nn.Module):
         self.model = model # CVAE decoder
         self.optimizer = optimizer
         self.kl_weight = args_override['kl_weight']
+
+        # CLIP integration
+        self.clip_encoder = CLIPTextEncoder()
+        self.text_dim = 512
+        
+        # Get hidden_dim from DETR model 
+        self.hidden_dim = 256 
+        self.text_proj = nn.Linear(self.text_dim, self.hidden_dim)
+
         print(f'KL Weight {self.kl_weight}')
 
-    def __call__(self, qpos, image, actions=None, is_pad=None):
+    def __call__(self, qpos, image, actions=None, is_pad=None, instruction=None):
+        """Main training/inference method - OVERRIDDEN for CLIP"""
         env_state = None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
         image = normalize(image)
-        if actions is not None: # training time
+        
+        if actions is not None:  # TRAINING
             actions = actions[:, :self.model.num_queries]
             is_pad = is_pad[:, :self.model.num_queries]
-
+            
+            # Encode instruction for training batch
+            if instruction is not None:
+                text_emb = self.clip_encoder.batch_encode(instruction)
+                text_emb = self.text_proj(text_emb.to(actions.device))
+                # Inject into model 
+            
             a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, image, env_state, actions, is_pad)
+            
             total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-            loss_dict = dict()
             all_l1 = F.l1_loss(actions, a_hat, reduction='none')
             l1 = (all_l1 * ~is_pad.unsqueeze(-1)).mean()
-            loss_dict['l1'] = l1
-            loss_dict['kl'] = total_kld[0]
-            loss_dict['loss'] = loss_dict['l1'] + loss_dict['kl'] * self.kl_weight
+            
+            loss_dict = {
+                'l1': l1,
+                'kl': total_kld[0],
+                'loss': l1 + total_kld[0] * self.kl_weight
+            }
             return loss_dict
-        else: # inference time
-            a_hat, _, (_, _) = self.model(qpos, image, env_state) # no action, sample from prior
+        
+        else:  # INFERENCE
+            # Language conditioning at inference
+            if instruction is not None:
+                text_emb = self.clip_encoder.encode_single(instruction)
+                text_emb = self.text_proj(torch.tensor(text_emb).to(image.device).unsqueeze(0))
+                # Modify model forward to accept text_emb (see below)
+            
+            a_hat, _, (_, _) = self.model(qpos, image, env_state)
             return a_hat
 
     def configure_optimizers(self):

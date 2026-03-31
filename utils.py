@@ -1,4 +1,5 @@
 import numpy as np
+import clip_encoder
 import torch
 import os
 import h5py
@@ -73,7 +74,14 @@ class EpisodicDataset(torch.utils.data.Dataset):
         action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
         qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
 
-        return image_data, qpos_data, action_data, is_pad
+        # CLIP language conditioning
+        try:
+            instruction = root['instruction'][:].astype(str)[0]
+            instruction_emb = clip_encoder.encode_single(instruction)
+        except KeyError:
+            instruction_emb = np.zeros(512)
+
+        return image_data, qpos_data, action_data, is_pad, instruction_emb
 
 
 def get_norm_stats(dataset_dir, num_episodes):

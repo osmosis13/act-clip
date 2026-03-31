@@ -15,11 +15,13 @@ from utils import sample_box_pose, sample_insertion_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
+from clip_encoder import CLIPTextEncoder
 
 from sim_env import BOX_POSE
 
 import IPython
 e = IPython.embed
+clip_encoder = CLIPTextEncoder()
 
 def main(args):
     set_seed(1)
@@ -144,7 +146,7 @@ def get_image(ts, camera_names):
         curr_image = rearrange(ts.observation['images'][cam_name], 'h w c -> c h w')
         curr_images.append(curr_image)
     curr_image = np.stack(curr_images, axis=0)
-    curr_image = torch.from_numpy(curr_image / 255.0).float().cuda().unsqueeze(0)
+    curr_image = torch.from_numpy(curr_image / 255.0).float().cpu().unsqueeze(0)
     return curr_image
 
 
@@ -167,7 +169,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
     policy = make_policy(policy_class, policy_config)
     loading_status = policy.load_state_dict(torch.load(ckpt_path))
     print(loading_status)
-    policy.cuda()
+    policy.cpu()
     policy.eval()
     print(f'Loaded: {ckpt_path}')
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
@@ -216,9 +218,9 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
         ### evaluation loop
         if temporal_agg:
-            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cuda()
+            all_time_actions = torch.zeros([max_timesteps, max_timesteps+num_queries, state_dim]).cpu()
 
-        qpos_history = torch.zeros((1, max_timesteps, state_dim)).cuda()
+        qpos_history = torch.zeros((1, max_timesteps, state_dim)).cpu()
         image_list = [] # for visualization
         qpos_list = []
         target_qpos_list = []
@@ -239,14 +241,14 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     image_list.append({'main': obs['image']})
                 qpos_numpy = np.array(obs['qpos'])
                 qpos = pre_process(qpos_numpy)
-                qpos = torch.from_numpy(qpos).float().cuda().unsqueeze(0)
+                qpos = torch.from_numpy(qpos).float().cpu().unsqueeze(0)
                 qpos_history[:, t] = qpos
                 curr_image = get_image(ts, camera_names)
 
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image)
+                        all_actions = policy(qpos, curr_image, instruction=["transfer cube"])
                     if temporal_agg:
                         all_time_actions[[t], t:t+num_queries] = all_actions
                         actions_for_curr_step = all_time_actions[:, t]
@@ -265,7 +267,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                     raise NotImplementedError
 
                 ### post-process actions
-                raw_action = raw_action.squeeze(0).cuda().numpy()
+                raw_action = raw_action.squeeze(0).cpu().numpy()
                 action = post_process(raw_action)
                 target_qpos = action
 
@@ -314,9 +316,10 @@ def eval_bc(config, ckpt_name, save_episode=True):
 
 
 def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad) # TODO remove None
+    image_data, qpos_data, action_data, is_pad, instruction_emb = data
+    image_data, qpos_data, action_data, is_pad = image_data.cpu(), qpos_data.cpu(), action_data.cpu(), is_pad.cpu()
+    
+    return policy(qpos_data, image_data, action_data, is_pad, instruction_emb)
 
 
 def train_bc(train_dataloader, val_dataloader, config):
@@ -329,7 +332,7 @@ def train_bc(train_dataloader, val_dataloader, config):
     set_seed(seed)
 
     policy = make_policy(policy_class, policy_config)
-    policy.cuda()
+    policy.cpu()
     optimizer = make_optimizer(policy_class, policy)
 
     train_history = []

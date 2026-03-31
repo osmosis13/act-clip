@@ -119,6 +119,23 @@ def main(args):
             success.append(0)
             print(f"{episode_idx=} Failed")
 
+        if episode_max_reward == env.task.max_reward:  # SUCCESS
+            instructions_success = [
+                "successfully transfer cube to left gripper",
+                "pick up cube and transfer successfully", 
+                "complete cube transfer perfectly"
+            ]
+            episode_instruction = np.random.choice(instructions_success)
+        else:  # FAILURE
+            instructions_failure = [
+                "attempt to transfer cube to left gripper",
+                "try to pick up and transfer cube", 
+                "attempt cube transfer (failed)"
+            ]
+            episode_instruction = np.random.choice(instructions_failure)
+
+        print(f"Demo: {'SUCCESS' if episode_max_reward == env.task.max_reward else 'FAILURE'}, Instruction: '{episode_instruction}'")
+
         plt.close()
 
         """
@@ -175,6 +192,7 @@ def main(args):
 
             for name, array in data_dict.items():
                 root[name][...] = array
+            root.create_dataset('instruction', data=episode_instruction.encode('utf-8'))
         print(f'Saving: {time.time() - t0:.1f} secs\n')
 
     print(f'Saved to {dataset_dir}')
