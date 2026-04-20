@@ -26,7 +26,6 @@ class ACTPolicy(nn.Module):
         print(f'KL Weight {self.kl_weight}')
 
     def __call__(self, qpos, image, actions=None, is_pad=None, instruction=None):
-        """Main training/inference method - OVERRIDDEN for CLIP"""
         env_state = None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
@@ -36,13 +35,17 @@ class ACTPolicy(nn.Module):
             actions = actions[:, :self.model.num_queries]
             is_pad = is_pad[:, :self.model.num_queries]
             
-            # Encode instruction for training batch
+            # instruction is already an embedding tensor [B, 512]
             if instruction is not None:
-                text_emb = self.clip_encoder.batch_encode(instruction)
-                text_emb = self.text_proj(text_emb.to(actions.device))
-                # Inject into model 
-            
-            a_hat, is_pad_hat, (mu, logvar) = self.model(qpos, image, env_state, actions, is_pad)
+                # instruction: [B, 512] from dataset
+                text_emb = instruction.to(actions.device).float()      # [B, 512]
+                text_emb = self.text_proj(text_emb)                    # [B, 256] (hidden_dim)
+            else:
+                text_emb = None
+
+            a_hat, is_pad_hat, (mu, logvar) = self.model(
+                qpos, image, env_state, actions, is_pad, text_emb=text_emb
+                )
             
             total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
             all_l1 = F.l1_loss(actions, a_hat, reduction='none')
@@ -55,14 +58,19 @@ class ACTPolicy(nn.Module):
             }
             return loss_dict
         
-        else:  # INFERENCE
-            # Language conditioning at inference
+        else:
+            # At inference you have raw text, not embeddings
             if instruction is not None:
-                text_emb = self.clip_encoder.encode_single(instruction)
-                text_emb = self.text_proj(torch.tensor(text_emb).to(image.device).unsqueeze(0))
-                # Modify model forward to accept text_emb (see below)
-            
-            a_hat, _, (_, _) = self.model(qpos, image, env_state)
+                # instruction is a string like "transfer cube to left gripper"
+                instr_emb = self.clip_encoder.encode_single(instruction)  # [512]
+                instr_emb = instr_emb.unsqueeze(0).to(image.device).float()  # [1, 512]
+                text_emb = self.text_proj(instr_emb)                         # [1, 256]
+            else:
+                text_emb = None
+
+            a_hat, _, (_, _) = self.model(
+                qpos, image, env_state, text_emb=text_emb
+                )
             return a_hat
 
     def configure_optimizers(self):
