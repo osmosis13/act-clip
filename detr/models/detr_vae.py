@@ -134,12 +134,9 @@ class DETRVAE(nn.Module):
             if text_emb is not None:
                 # text_emb: [bs, hidden_dim] (from ACTPolicy.text_proj)
                 # reshape to [1, bs, hidden_dim] as a single query token
-                assert text_emb.shape[1] == hidden_dim, \
-                    f"Expected text_emb dim {hidden_dim}, got {text_emb.shape[1]}"
-                lang_token = text_emb.unsqueeze(0)  # (1, bs, hidden_dim)
-                query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
-                # expand query_embed to [num_queries, bs, hidden_dim]
-                query_embed = torch.cat([lang_token, query_embed], dim=0)
+                text_token = text_emb.mean(dim=0, keepdim=True)  # [1, hidden_dim]
+                # concatenate along query dimension
+                query_embed = torch.cat([text_token, query_embed], dim=0)  # [1 + num_queries, hidden_dim]
             # run transformer with extended queries
             hs_all = self.transformer(
                 src, None, query_embed, pos,
