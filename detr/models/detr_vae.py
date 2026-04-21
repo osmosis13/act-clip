@@ -131,14 +131,13 @@ class DETRVAE(nn.Module):
             pos = torch.cat(all_cam_pos, axis=3)
             query_embed = self.query_embed.weight  # (num_queries, hidden_dim)
             num_queries, hidden_dim = query_embed.shape
-            # expand queries for batch
-            query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
             if text_emb is not None:
                 # text_emb: [bs, hidden_dim] (from ACTPolicy.text_proj)
                 # reshape to [1, bs, hidden_dim] as a single query token
                 assert text_emb.shape[1] == hidden_dim, \
                     f"Expected text_emb dim {hidden_dim}, got {text_emb.shape[1]}"
                 lang_token = text_emb.unsqueeze(0)  # (1, bs, hidden_dim)
+                query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
                 # expand query_embed to [num_queries, bs, hidden_dim]
                 query_embed = torch.cat([lang_token, query_embed], dim=0)
             # run transformer with extended queries
