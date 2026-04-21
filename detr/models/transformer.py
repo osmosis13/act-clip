@@ -46,34 +46,40 @@ class Transformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None):
-        # TODO flatten only when input has H and W
-        if len(src.shape) == 4: # has H and W
-            # flatten NxCxHxW to HWxNxC
+    def forward(self, src, mask, query_embed, pos_embed, latent_input=None, proprio_input=None, additional_pos_embed=None, lang_token=None):  # <-- add lang_token
+        
+        if len(src.shape) == 4:
             bs, c, h, w = src.shape
             src = src.flatten(2).permute(2, 0, 1)
             pos_embed = pos_embed.flatten(2).permute(2, 0, 1).repeat(1, bs, 1)
-            query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
-            # mask = mask.flatten(1)
+            # Internal unsqueeze happens here, on the raw (num_queries, hidden_dim) embed
+            query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
+            # Inject language token AFTER unsqueeze, so shapes are consistent
+            if lang_token is not None:
+                # lang_token: (bs, hidden_dim) from detr_vae
+                lang_token = lang_token.unsqueeze(0)               # (1, bs, hidden_dim)
+                lang_pos   = torch.zeros_like(lang_token)          # learned-zero pos for lang
+                query_embed = torch.cat([lang_token, query_embed], dim=0)  # (1+num_queries, bs, hidden_dim)
 
-            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1) # seq, bs, dim
+            additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1)
             pos_embed = torch.cat([additional_pos_embed, pos_embed], axis=0)
 
             addition_input = torch.stack([latent_input, proprio_input], axis=0)
             src = torch.cat([addition_input, src], axis=0)
         else:
-            assert len(src.shape) == 3
-            # flatten NxHWxC to HWxNxC
             bs, hw, c = src.shape
             src = src.permute(1, 0, 2)
             pos_embed = pos_embed.unsqueeze(1).repeat(1, bs, 1)
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+            if lang_token is not None:
+                lang_token = lang_token.unsqueeze(0)
+                query_embed = torch.cat([lang_token, query_embed], dim=0)
 
-        tgt = torch.zeros_like(query_embed)
+        tgt = torch.zeros_like(query_embed)   # correctly sized: (1+num_queries or num_queries, bs, hidden_dim)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, query_pos=query_embed)
-        hs = hs.transpose(1, 2)
+                        pos=pos_embed, query_pos=query_embed)
+        hs = hs.transpose(1, 2)              # (num_layers, bs, 1+num_queries or num_queries, hidden_dim)
         return hs
 
 class TransformerEncoder(nn.Module):

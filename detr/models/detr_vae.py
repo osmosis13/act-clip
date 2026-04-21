@@ -115,43 +115,31 @@ class DETRVAE(nn.Module):
             latent_input = self.latent_out_proj(latent_sample)
 
         if self.backbones is not None:
-            # Image observation features and position embeddings
             all_cam_features = []
             all_cam_pos = []
             for cam_id, cam_name in enumerate(self.camera_names):
-                features, pos = self.backbones[0](image[:, cam_id]) # HARDCODED
-                features = features[0] # take the last layer feature
+                features, pos = self.backbones[0](image[:, cam_id])
+                features = features[0]
                 pos = pos[0]
                 all_cam_features.append(self.input_proj(features))
                 all_cam_pos.append(pos)
-            # proprioception features
+
             proprio_input = self.input_proj_robot_state(qpos)
-            # fold camera dimension into width dimension
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
-            query_embed = self.query_embed.weight  # (num_queries, hidden_dim)
-            if text_emb is not None:
-                # text_emb: [bs, hidden_dim] (from ACTPolicy.text_proj)
-                # reshape to [1, bs, hidden_dim] as a single query token
-                lang_token = text_emb.unsqueeze(0)  # (1, bs, hidden_dim)
-                # expand query_embed to [num_queries, bs, hidden_dim]
-                query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
-                # concat language token in front: [1 + num_queries, bs, hidden_dim]
-                query_embed = torch.cat([lang_token, query_embed], dim=0)
-            else:
-                # original behavior: broadcast queries over batch
-                query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # (num_queries, bs, hidden_dim)
-            # run transformer with extended queries
+
+            # Pass raw query_embed (num_queries, hidden_dim) — transformer handles unsqueeze internally
+            # Pass text_emb (bs, hidden_dim) separately as lang_token
             hs_all = self.transformer(
-                src, None, query_embed, pos,
-                latent_input, proprio_input, self.additional_pos_embed.weight
-            )[0]  # hs_all: [1 + num_queries or num_queries, bs, hidden_dim]
+                src, None, self.query_embed.weight, pos,
+                latent_input, proprio_input, self.additional_pos_embed.weight,
+                lang_token=text_emb   # (bs, hidden_dim) or None
+            )[0]  # take last decoder layer: (bs, 1+num_queries, hidden_dim)
 
             if text_emb is not None:
-                # drop the first token (language) for action prediction
-                hs = hs_all[1:]  # (num_queries, bs, hidden_dim)
+                hs = hs_all[:, 1:, :]   # drop language token -> (bs, num_queries, hidden_dim)
             else:
-                hs = hs_all  # (num_queries, bs, hidden_dim)
+                hs = hs_all              # (bs, num_queries, hidden_dim)
         else:
             qpos = self.input_proj_robot_state(qpos)
             env_state = self.input_proj_env_state(env_state)
