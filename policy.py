@@ -20,7 +20,7 @@ class ACTPolicy(nn.Module):
         self.text_dim = 512
         
         # Get hidden_dim from DETR model 
-        self.hidden_dim = 256 
+        self.hidden_dim = args_override['hidden_dim']
         self.text_proj = nn.Linear(self.text_dim, self.hidden_dim)
 
         print(f'KL Weight {self.kl_weight}')
@@ -61,10 +61,12 @@ class ACTPolicy(nn.Module):
         else:
             # At inference you have raw text, not embeddings
             if instruction is not None:
-                # instruction is a string like "transfer cube to left gripper"
-                instr_emb = self.clip_encoder.encode_single(instruction)  # [512]
+                # instruction is a string at inference
+                if isinstance(instruction, list):
+                    instruction = instruction[0]  # ["transfer cube"] -> "transfer cube"
+                instr_emb = self.clip_encoder.encode(instruction)        # <-- was encode_single
                 instr_emb = instr_emb.unsqueeze(0).to(image.device).float()  # [1, 512]
-                text_emb = self.text_proj(instr_emb)                         # [1, 256]
+                text_emb = self.text_proj(instr_emb)                         # [1, 512]
             else:
                 text_emb = None
 

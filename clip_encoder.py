@@ -3,9 +3,9 @@ import clip
 from typing import Dict, Any
 
 class CLIPTextEncoder:
-    def __init__(self, device=None):
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model, _ = clip.load("ViT-B/32", device=device)
+    def __init__(self, device='cuda'):
+        self.device = device 
+        self.model, _ = clip.load("ViT-B/32", device=self.device)
         self.model.eval()
     
     @torch.no_grad()
