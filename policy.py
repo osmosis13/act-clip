@@ -20,10 +20,7 @@ class ACTPolicy(nn.Module):
         self.text_dim = 512
         
         # Get hidden_dim from DETR model 
-        # self.hidden_dim = 256 
-        # self.text_proj = nn.Linear(self.text_dim, self.hidden_dim)
-
-        self.hidden_dim = args_override['hidden_dim']      # will be 512 with your CLIP
+        self.hidden_dim = 256 
         self.text_proj = nn.Linear(self.text_dim, self.hidden_dim)
 
         print(f'KL Weight {self.kl_weight}')
