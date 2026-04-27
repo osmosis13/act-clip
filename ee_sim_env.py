@@ -35,7 +35,13 @@ def make_ee_sim_env(task_name):
                                         right_gripper_qvel (1)]     # normalized gripper velocity (pos: opening, neg: closing)
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
-    if 'sim_transfer_cube' in task_name:
+    if 'sim_transfer_cube_color' in task_name:
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
+        physics = mujoco.Physics.from_xml_path(xml_path)
+        task = TransferCubeColorEETask(random=False)
+        env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
+                                  n_sub_steps=None, flat_observation=False)
+    elif 'sim_transfer_cube' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = TransferCubeEETask(random=False)
@@ -325,5 +331,71 @@ class ThrowAndCatchEETask(BimanualViperXEETask):
         if touch_left_gripper: # attempted throw
             reward = 3
         if touch_left_gripper and not touch_table: # successful catch
+            reward = 4
+        return reward
+
+class TransferCubeColorEETask(BimanualViperXEETask):
+    #Two cubes (red + blue) on the table.
+    #Target cube is set per-episode via self.target_color before env.reset().
+    #Instruction: 'pick up red cube' or 'pick up blue cube'
+    def __init__(self, random=None):
+        super().__init__(random=random)
+        self.max_reward = 2          # 1=grasped, 2=lifted
+        self.target_color = 'red'    # default; overwritten per episode
+
+    def initialize_episode(self, physics):
+        self.initialize_robots(physics)
+
+        # Spawn red box
+        red_pose = sample_box_pose()                      # existing helper from utils
+        red_idx = physics.model.name2id('red_box_joint', 'joint')
+        np.copyto(physics.data.qpos[red_idx: red_idx + 7], red_pose)
+
+        # Spawn blue box — offset so it doesn't overlap red
+        blue_pose = sample_box_pose()
+        # Force blue to the opposite side of the table from red
+        blue_pose[0] *= -1                                # mirror x
+        blue_idx = physics.model.name2id('blue_box_joint', 'joint')
+        np.copyto(physics.data.qpos[blue_idx: blue_idx + 7], blue_pose)
+
+        super().initialize_episode(physics)
+
+    @staticmethod
+    def get_env_state(physics):
+        # Returns both cube poses: [red(7), blue(7)]
+        return physics.data.qpos.copy()[16:]
+
+    def get_reward(self, physics):
+        target_geom = f'{self.target_color}_box'
+        all_contact_pairs = []
+        for i_contact in range(physics.data.ncon):
+            id_geom_1 = physics.data.contact[i_contact].geom1
+            id_geom_2 = physics.data.contact[i_contact].geom2
+            all_contact_pairs.append((
+                physics.model.id2name(id_geom_1, 'geom'),
+                physics.model.id2name(id_geom_2, 'geom'),
+            ))
+
+        touch_left_gripper  = (target_geom, "vx300s_left/10_left_gripper_finger")  in all_contact_pairs
+        touch_right_gripper = (target_geom, "vx300s_right/10_right_gripper_finger") in all_contact_pairs
+        touch_table         = (target_geom, "table") in all_contact_pairs
+
+        # Get target box height from env_state
+        env_state = self.get_env_state(physics)
+        if self.target_color == 'red':
+            box_z = env_state[2]   # red:  qpos[16:23] → index 2 is z
+        else:
+            box_z = env_state[9]   # blue: qpos[23:30] → index 2 relative = index 9 absolute
+
+        z_thresh = 0.06
+
+        reward = 0
+        if touch_right_gripper:
+            reward = 1
+        if touch_right_gripper and not touch_table:                          # lifted by right
+            reward = 2
+        if touch_left_gripper:                                               # attempted transfer
+            reward = 3
+        if touch_left_gripper and not touch_table and box_z > z_thresh:     # successful transfer
             reward = 4
         return reward

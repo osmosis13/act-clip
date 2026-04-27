@@ -17,7 +17,7 @@ from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
 from clip_encoder import CLIPTextEncoder
 
-from sim_env import BOX_POSE
+from sim_env import BOX_POSE, BLUE_BOX_POSE
 
 import IPython
 e = IPython.embed
@@ -164,6 +164,25 @@ def eval_bc(config, ckpt_name, save_episode=True):
     temporal_agg = config['temporal_agg']
     onscreen_cam = 'angle'
 
+    # ── NEW: query instruction from terminal ──────────────────────────
+    print("\n" + "="*50)
+    print("INSTRUCTION QUERY")
+    print("  1  →  pick up red cube")
+    print("  2  →  pick up blue cube")
+    print("  or type a custom instruction")
+    _choice = input("Enter choice: ").strip()
+    if _choice == "1":
+        instruction = "pick up red cube"
+    elif _choice == "2":
+        instruction = "pick up blue cube"
+    else:
+        instruction = _choice if _choice else "pick up red cube"
+    print(f"Running policy with instruction: '{instruction}'")
+    print("="*50 + "\n")
+
+    # also set target_color on the task so reward fn tracks the right cube
+    target_color = "red" if "red" in instruction else "blue"
+
     # load policy and stats
     ckpt_path = os.path.join(ckpt_dir, ckpt_name)
     policy = make_policy(policy_class, policy_config)
@@ -203,12 +222,20 @@ def eval_bc(config, ckpt_name, save_episode=True):
     for rollout_id in range(num_rollouts):
         rollout_id += 0
         ### set task
-        if 'sim_transfer_cube' in task_name:
+        if 'sim_transfer_cube_color' in task_name:
+            BOX_POSE[0]      = sample_box_pose()   # red — existing helper
+            BLUE_BOX_POSE[0] = sample_blue_box_pose()  # blue — see below
+            env.task.target_color = target_color   # set which cube to pick this rollout
+        elif 'sim_transfer_cube' in task_name:
             BOX_POSE[0] = sample_box_pose() # used in sim reset
         elif 'sim_insertion' in task_name:
             BOX_POSE[0] = np.concatenate(sample_insertion_pose()) # used in sim reset
 
         ts = env.reset()
+
+        # NEW: tell the task which cube is the target this rollout
+        if hasattr(env.task, 'target_color'):
+            env.task.target_color = target_color
 
         ### onscreen render
         if onscreen_render:
@@ -248,7 +275,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
                 ### query policy
                 if config['policy_class'] == "ACT":
                     if t % query_frequency == 0:
-                        all_actions = policy(qpos, curr_image, instruction=["transfer cube"])
+                        all_actions = policy(qpos, curr_image, instruction=[instruction])
                     if temporal_agg:
                         all_time_actions[[t], t:t+num_queries] = all_actions
                         actions_for_curr_step = all_time_actions[:, t]

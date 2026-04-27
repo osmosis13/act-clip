@@ -7,7 +7,7 @@ import h5py
 
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN, SIM_TASK_CONFIGS
 from ee_sim_env import make_ee_sim_env
-from sim_env import make_sim_env, BOX_POSE
+from sim_env import make_sim_env, BOX_POSE, BLUE_BOX_POSE
 from scripted_policy import PickAndTransferPolicy, InsertionPolicy, ThrowAndCatchPolicy
 
 import IPython
@@ -94,6 +94,7 @@ def main(args):
         print('Replaying joint commands')
         env = make_sim_env(task_name)
         BOX_POSE[0] = subtask_info # make sure the sim_env has the same object configurations as ee_sim_env
+        BLUE_BOX_POSE[0] = subtask_info 
         ts = env.reset()
 
         episode_replay = [ts]

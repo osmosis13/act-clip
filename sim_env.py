@@ -16,6 +16,7 @@ import IPython
 e = IPython.embed
 
 BOX_POSE = [None] # to be changed from outside
+BLUE_BOX_POSE = [None]   # new — blue box pose
 
 def make_sim_env(task_name):
     """
@@ -35,7 +36,13 @@ def make_sim_env(task_name):
                                         right_gripper_qvel (1)]     # normalized gripper velocity (pos: opening, neg: closing)
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
-    if 'sim_transfer_cube' in task_name:
+    if 'sim_transfer_cube_color' in task_name:
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
+        physics = mujoco.Physics.from_xml_path(xml_path)
+        task = TransferCubeColorTask(random=False)
+        env = control.Environment(physics, task, time_limit=20, control_timestep=DT,
+                                  n_sub_steps=None, flat_observation=False)
+    elif 'sim_transfer_cube' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_transfer_cube.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = TransferCubeTask(random=False)
@@ -291,6 +298,68 @@ class ThrowAndCatchEETask(BimanualViperXTask):
             reward = 4
         return reward
 
+class TransferCubeColorTask(BimanualViperXTask):
+    def __init__(self, random=None):
+        super().__init__(random=random)
+        self.max_reward = 4
+        self.target_color = 'red'    # overwritten per episode from eval loop
+
+    def initialize_episode(self, physics):
+        """Sets the state of the environment at the start of each episode."""
+        with physics.reset_context():
+            physics.named.data.qpos[:16] = START_ARM_POSE
+            np.copyto(physics.data.ctrl, START_ARM_POSE)
+
+            # Red box — same pattern as original TransferCubeTask
+            assert BOX_POSE[0] is not None
+            physics.named.data.qpos[16:23] = BOX_POSE[0]
+
+            # Blue box — sits right after red box in qpos (7 more values)
+            assert BLUE_BOX_POSE[0] is not None
+            physics.named.data.qpos[23:30] = BLUE_BOX_POSE[0]
+
+        super().initialize_episode(physics)
+
+    @staticmethod
+    def get_env_state(physics):
+        # Returns both cube poses: [red(7), blue(7)] = 14 values
+        return physics.data.qpos.copy()[16:]
+
+    def get_reward(self, physics):
+        target_geom = f'{self.target_color}_box'
+
+        all_contact_pairs = []
+        for i_contact in range(physics.data.ncon):
+            id_geom_1 = physics.data.contact[i_contact].geom1
+            id_geom_2 = physics.data.contact[i_contact].geom2
+            name_geom_1 = physics.model.id2name(id_geom_1, 'geom')
+            name_geom_2 = physics.model.id2name(id_geom_2, 'geom')
+            contact_pair = (name_geom_1, name_geom_2)
+            all_contact_pairs.append(contact_pair)
+
+        touch_left_gripper  = (target_geom, "vx300s_left/10_left_gripper_finger")  in all_contact_pairs
+        touch_right_gripper = (target_geom, "vx300s_right/10_right_gripper_finger") in all_contact_pairs
+        touch_table         = (target_geom, "table") in all_contact_pairs
+
+        # Get target box height from env_state
+        env_state = self.get_env_state(physics)
+        if self.target_color == 'red':
+            box_z = env_state[2]   # red:  qpos[16:23] → index 2 is z
+        else:
+            box_z = env_state[9]   # blue: qpos[23:30] → index 2 relative = index 9 absolute
+
+        z_thresh = 0.06
+
+        reward = 0
+        if touch_right_gripper:
+            reward = 1
+        if touch_right_gripper and not touch_table:                          # lifted by right
+            reward = 2
+        if touch_left_gripper:                                               # attempted transfer
+            reward = 3
+        if touch_left_gripper and not touch_table and box_z > z_thresh:     # successful transfer
+            reward = 4
+        return reward
 
 def get_action(master_bot_left, master_bot_right):
     action = np.zeros(14)
