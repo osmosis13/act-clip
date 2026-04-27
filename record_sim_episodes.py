@@ -35,7 +35,7 @@ def main(args):
 
     episode_len = SIM_TASK_CONFIGS[task_name]['episode_len']
     camera_names = SIM_TASK_CONFIGS[task_name]['camera_names']
-    if task_name == 'sim_transfer_cube_scripted':
+    if task_name in ('sim_transfer_cube_scripted', 'sim_transfer_cube_color_scripted'):
         policy_cls = PickAndTransferPolicy
     elif task_name == 'sim_insertion_scripted':
         policy_cls = InsertionPolicy
@@ -46,10 +46,13 @@ def main(args):
 
     success = []
     for episode_idx in range(num_episodes):
+        target_color = np.random.choice(['red', 'blue'])
+        instruction = f'pick up {target_color} cube'
         print(f'{episode_idx=}')
         print('Rollout out EE space scripted policy')
         # setup the environment
         env = make_ee_sim_env(task_name)
+        env.task.target_color = target_color
         ts = env.reset()
         episode = [ts]
         policy = policy_cls(inject_noise)
@@ -83,7 +86,7 @@ def main(args):
             joint[6] = left_ctrl
             joint[6+7] = right_ctrl
 
-        subtask_info = episode[0].observation['env_state'].copy() # box pose at step 0
+        subtask_info = episode[0].observation['env_state'].copy() # box pose at step 0, [red(7), blue(7)]
 
         # clear unused variables
         del env
@@ -93,8 +96,8 @@ def main(args):
         # setup the environment
         print('Replaying joint commands')
         env = make_sim_env(task_name)
-        BOX_POSE[0] = subtask_info # make sure the sim_env has the same object configurations as ee_sim_env
-        BLUE_BOX_POSE[0] = subtask_info 
+        BOX_POSE[0]      = subtask_info[:7]   # red box pose
+        BLUE_BOX_POSE[0] = subtask_info[7:]   # blue box pose # make sure the sim_env has the same object configurations as ee_sim_env
         ts = env.reset()
 
         episode_replay = [ts]
@@ -193,7 +196,7 @@ def main(args):
 
             for name, array in data_dict.items():
                 root[name][...] = array
-            root.create_dataset('instruction', data=episode_instruction.encode('utf-8'))
+            root.create_dataset('instruction', data=instruction.encode('utf-8'))
         print(f'Saving: {time.time() - t0:.1f} secs\n')
 
     print(f'Saved to {dataset_dir}')

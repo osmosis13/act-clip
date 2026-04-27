@@ -8,7 +8,7 @@ from constants import PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN
 from constants import PUPPET_GRIPPER_POSITION_NORMALIZE_FN
 from constants import PUPPET_GRIPPER_VELOCITY_NORMALIZE_FN
 
-from utils import sample_box_pose, sample_insertion_pose
+from utils import sample_box_pose, sample_blue_box_pose, sample_insertion_pose
 from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
@@ -340,14 +340,15 @@ class TransferCubeColorEETask(BimanualViperXEETask):
     #Instruction: 'pick up red cube' or 'pick up blue cube'
     def __init__(self, random=None):
         super().__init__(random=random)
-        self.max_reward = 2          # 1=grasped, 2=lifted
+        self.max_reward = 4 
         self.target_color = 'red'    # default; overwritten per episode
 
     def initialize_episode(self, physics):
         self.initialize_robots(physics)
 
         # Spawn red box
-        red_pose = sample_box_pose()                      # existing helper from utils
+        red_pose  = sample_box_pose()
+        blue_pose = sample_blue_box_pose()
         red_idx = physics.model.name2id('red_box_joint', 'joint')
         np.copyto(physics.data.qpos[red_idx: red_idx + 7], red_pose)
 

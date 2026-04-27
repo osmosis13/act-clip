@@ -44,6 +44,20 @@ SIM_TASK_CONFIGS = {
         'episode_len': 500,
         'camera_names': ['top']
     },
+
+    'sim_transfer_cube_color_scripted': {
+        'dataset_dir': DATA_DIR + '/sim_transfer_cube_color_scripted',
+        'num_episodes': 100,   # 50 red + 50 blue
+        'episode_len': 400,
+        'camera_names': ['angle']
+    },
+
+        'sim_transfer_cube_color_human': {
+        'dataset_dir': DATA_DIR + '/sim_transfer_cube_color_human',
+        'num_episodes': 100,   # 50 red + 50 blue
+        'episode_len': 400,
+        'camera_names': ['angle']
+    },
 }
 
 ### Simulation envs fixed constants

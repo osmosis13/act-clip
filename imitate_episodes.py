@@ -11,7 +11,7 @@ from einops import rearrange
 from constants import DT
 from constants import PUPPET_GRIPPER_JOINT_OPEN
 from utils import load_data # data functions
-from utils import sample_box_pose, sample_insertion_pose # robot functions
+from utils import sample_box_pose, sample_blue_box_pose, sample_insertion_pose # robot functions
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
@@ -345,7 +345,7 @@ def eval_bc(config, ckpt_name, save_episode=True):
 def forward_pass(data, policy):
     image_data, qpos_data, action_data, is_pad, instruction_emb = data
     image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    
+    instruction_emb = instruction_emb.cuda()
     return policy(qpos_data, image_data, action_data, is_pad, instruction_emb)
 
 
