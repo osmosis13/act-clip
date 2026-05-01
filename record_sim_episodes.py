@@ -100,6 +100,7 @@ def main(args):
         env = make_sim_env(task_name)
         BOX_POSE[0]      = subtask_info[:7]   # red box pose
         BLUE_BOX_POSE[0] = subtask_info[7:]   # blue box pose # make sure the sim_env has the same object configurations as ee_sim_env
+        env.task.target_color = target_color
         ts = env.reset()
 
         episode_replay = [ts]
