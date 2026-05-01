@@ -37,7 +37,7 @@ def make_sim_env(task_name):
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
     """
     if 'sim_transfer_cube_color' in task_name:
-        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
+        xml_path = os.path.join(XML_DIR, f'bimanual_viperx_transfer_cube.xml')
         physics = mujoco.Physics.from_xml_path(xml_path)
         task = TransferCubeColorTask(random=False)
         env = control.Environment(physics, task, time_limit=20, control_timestep=DT,

@@ -346,18 +346,18 @@ class TransferCubeColorEETask(BimanualViperXEETask):
     def initialize_episode(self, physics):
         self.initialize_robots(physics)
 
-        # Spawn red box
         red_pose  = sample_box_pose()
         blue_pose = sample_blue_box_pose()
-        red_idx = physics.model.name2id('red_box_joint', 'joint')
-        np.copyto(physics.data.qpos[red_idx: red_idx + 7], red_pose)
 
-        # Spawn blue box — offset so it doesn't overlap red
-        blue_pose = sample_box_pose()
-        # Force blue to the opposite side of the table from red
-        blue_pose[0] *= -1                                # mirror x
-        blue_idx = physics.model.name2id('blue_box_joint', 'joint')
-        np.copyto(physics.data.qpos[blue_idx: blue_idx + 7], blue_pose)
+        # jnt_qposadr gives the correct index into qpos for each joint,
+        # accounting for multi-DOF (free) joints that precede it.
+        red_id  = physics.model.name2id('red_box_joint',  'joint')
+        blue_id = physics.model.name2id('blue_box_joint', 'joint')
+        red_adr  = physics.model.jnt_qposadr[red_id]   # → 16
+        blue_adr = physics.model.jnt_qposadr[blue_id]  # → 23 (not 17!)
+
+        np.copyto(physics.data.qpos[red_adr:  red_adr  + 7], red_pose)
+        np.copyto(physics.data.qpos[blue_adr: blue_adr + 7], blue_pose)
 
         super().initialize_episode(physics)
 

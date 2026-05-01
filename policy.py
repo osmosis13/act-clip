@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.transforms as transforms
@@ -14,6 +15,9 @@ class ACTPolicy(nn.Module):
         self.model = model # CVAE decoder
         self.optimizer = optimizer
         self.kl_weight = args_override['kl_weight']
+        self.log_std = nn.Parameter(
+            torch.zeros(args_override.get('state_dim', 14))
+        )
 
         # CLIP integration
         self.clip_encoder = CLIPTextEncoder()
@@ -74,6 +78,38 @@ class ACTPolicy(nn.Module):
                 qpos, image, env_state, text_emb=text_emb
                 )
             return a_hat
+        
+    def forward_rl(self, qpos, image, instruction=None):
+        """
+        Like __call__ inference but returns sampled actions + log_prob.
+        Used during RL rollouts.
+        """
+        env_state = None
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+        image = normalize(image)
+
+        # encode instruction
+        if instruction is not None:
+            if isinstance(instruction, list):
+                instruction = instruction[0]
+            instr_emb = self.clip_encoder.encode(instruction)
+            instr_emb = instr_emb.unsqueeze(0).to(image.device).float()
+            text_emb = self.text_proj(instr_emb)
+        else:
+            text_emb = None
+
+        # get mean action chunks from decoder
+        a_mean, _, (_, _) = self.model(qpos, image, env_state, text_emb=text_emb)
+        # a_mean: (1, num_queries, state_dim)
+
+        # sample from Gaussian around mean
+        std = self.log_std.exp().unsqueeze(0).unsqueeze(0)  # (1, 1, state_dim)
+        dist = torch.distributions.Normal(a_mean, std)
+        a_sample = dist.sample()                            # (1, num_queries, state_dim)
+        log_prob = dist.log_prob(a_sample).sum(dim=-1)      # (1, num_queries)
+
+        return a_sample, log_prob
 
     def configure_optimizers(self):
         return self.optimizer

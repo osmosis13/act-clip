@@ -45,6 +45,8 @@ def main(args):
         raise NotImplementedError
 
     success = []
+    red_successes = []
+    blue_successes = []
     for episode_idx in range(num_episodes):
         target_color = np.random.choice(['red', 'blue'])
         instruction = f'pick up {target_color} cube'
@@ -55,7 +57,7 @@ def main(args):
         env.task.target_color = target_color
         ts = env.reset()
         episode = [ts]
-        policy = policy_cls(inject_noise)
+        policy = policy_cls(inject_noise, target_color=target_color)
         # setup plotting
         if onscreen_render:
             ax = plt.subplot()
@@ -123,6 +125,11 @@ def main(args):
             success.append(0)
             print(f"{episode_idx=} Failed")
 
+        if target_color == 'red':
+            red_successes.append(1 if episode_max_reward == env.task.max_reward else 0)
+        else:
+            blue_successes.append(1 if episode_max_reward == env.task.max_reward else 0)
+
         if episode_max_reward == env.task.max_reward:  # SUCCESS
             instructions_success = [
                 "successfully transfer cube to left gripper",
@@ -139,6 +146,10 @@ def main(args):
             episode_instruction = np.random.choice(instructions_failure)
 
         print(f"Demo: {'SUCCESS' if episode_max_reward == env.task.max_reward else 'FAILURE'}, Instruction: '{episode_instruction}'")
+        print(f"Episode {episode_idx}: instruction='{instruction}', "
+        f"target={target_color}, "
+        f"red_cube_pos={subtask_info[:3].round(3)}, "
+        f"blue_cube_pos={subtask_info[7:10].round(3)}")
 
         plt.close()
 
@@ -201,6 +212,8 @@ def main(args):
 
     print(f'Saved to {dataset_dir}')
     print(f'Success: {np.sum(success)} / {len(success)}')
+    print(f'Red successes: {np.sum(red_successes)} / {len(red_successes)}')
+    print(f'Blue successes: {np.sum(blue_successes)} / {len(blue_successes)}')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

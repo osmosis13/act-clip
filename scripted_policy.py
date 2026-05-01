@@ -65,14 +65,23 @@ class BasePolicy:
 
 
 class PickAndTransferPolicy(BasePolicy):
+    def __init__(self, inject_noise=False, target_color='red'):
+        super().__init__(inject_noise)
+        self.target_color = target_color  # 'red' or 'blue'
 
     def generate_trajectory(self, ts_first):
         init_mocap_pose_right = ts_first.observation['mocap_pose_right']
         init_mocap_pose_left = ts_first.observation['mocap_pose_left']
 
-        box_info = np.array(ts_first.observation['env_state'])
-        box_xyz = box_info[:3]
-        box_quat = box_info[3:]
+        env_state = np.array(ts_first.observation['env_state'])
+
+        # Choose which cube to pick based on target_color
+        if self.target_color == 'red':
+            box_xyz  = env_state[:3]      # red cube position
+            box_quat = env_state[3:7]
+        else:
+            box_xyz  = env_state[7:10]    # blue cube position
+            box_quat = env_state[10:14]
         # print(f"Generate trajectory for {box_xyz=}")
 
         gripper_pick_quat = Quaternion(init_mocap_pose_right[3:])

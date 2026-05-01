@@ -151,8 +151,8 @@ def sample_box_pose():
     return np.concatenate([cube_position, cube_quat])
 
 def sample_blue_box_pose():
-    x_range = [0.0, 0.2]      # same x as red
-    y_range = [0.55, 0.65]    # offset y so it doesn't overlap red (red is 0.40-0.50)
+    x_range = [-0.2, 0.0]     # opposite end of table from red (red is 0.0 to 0.2)
+    y_range = [0.40, 0.50]    # same y range as red
     z_range = [0.05, 0.05]    # same height
 
     ranges = np.vstack([x_range, y_range, z_range])

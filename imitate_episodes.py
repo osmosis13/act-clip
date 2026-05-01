@@ -119,6 +119,14 @@ def main(args):
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
 
+    if args.get('finetune_rl', False):
+        print('\nStarting Phase 2: RL fine-tuning...')
+        config['rl_epochs']   = args.get('rl_epochs', 500)
+        config['rl_rollouts'] = args.get('rl_rollouts', 10)
+        config['rl_lr']       = args.get('rl_lr', 1e-6)
+        config['gamma']       = args.get('gamma', 0.99)
+        finetune_rl(config, bc_ckpt_name='policy_best.ckpt')
+
 
 def make_policy(policy_class, policy_config):
     if policy_class == 'ACT':
@@ -442,6 +450,150 @@ def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
         plt.savefig(plot_path)
     print(f'Saved plots to {ckpt_dir}')
 
+def finetune_rl(config, bc_ckpt_name):
+    """
+    Phase 2: Fine-tune the BC-trained policy using REINFORCE
+    in the sim environment with reward signal from get_reward().
+    """
+    import torch.optim as optim
+    from sim_env import make_sim_env, BOX_POSE, BLUE_BOX_POSE
+    from utils import sample_box_pose, sample_blue_box_pose
+
+    set_seed(config['seed'])
+
+    # ── Hyperparameters ──────────────────────────────────────────────
+    rl_epochs       = config.get('rl_epochs', 500)
+    rl_rollouts     = config.get('rl_rollouts', 10)   # rollouts per epoch
+    gamma           = config.get('gamma', 0.99)       # discount factor
+    rl_lr           = config.get('rl_lr', 1e-6)       # lower than BC lr
+    ckpt_dir        = config['ckpt_dir']
+    task_name       = config['task_name']
+    max_timesteps   = config['episode_len']
+    camera_names    = config['camera_names']
+    instructions    = ['pick up red cube', 'pick up blue cube']
+
+    # ── Load BC policy ───────────────────────────────────────────────
+    policy = make_policy(config['policy_class'], config['policy_config'])
+    ckpt_path = os.path.join(ckpt_dir, bc_ckpt_name)
+    policy.load_state_dict(torch.load(ckpt_path))
+    policy.cuda()
+
+    # Only fine-tune the decoder and text_proj, keep CLIP frozen
+    # This prevents catastrophic forgetting of BC knowledge
+    trainable_params = (
+        list(policy.model.parameters()) +
+        list(policy.text_proj.parameters()) +
+        [policy.log_std]
+    )
+    optimizer = optim.Adam(trainable_params, lr=rl_lr)
+
+    # ── Load stats for pre/post processing ───────────────────────────
+    stats_path = os.path.join(ckpt_dir, 'dataset_stats.pkl')
+    with open(stats_path, 'rb') as f:
+        stats = pickle.load(f)
+    pre_process  = lambda s: (s - stats['qpos_mean']) / stats['qpos_std']
+    post_process = lambda a: a * stats['action_std'] + stats['action_mean']
+
+    env = make_sim_env(task_name)
+    best_success_rate = 0.0
+
+    for epoch in range(rl_epochs):
+        epoch_loss    = []
+        epoch_rewards = []
+        policy.train()
+
+        for rollout_id in range(rl_rollouts):
+            # Randomly pick instruction for this rollout
+            instruction  = np.random.choice(instructions)
+            target_color = 'red' if 'red' in instruction else 'blue'
+
+            # Set cube poses
+            BOX_POSE[0]      = sample_box_pose()
+            BLUE_BOX_POSE[0] = sample_blue_box_pose()
+            env.task.target_color = target_color
+            ts = env.reset()
+
+            # Storage for this rollout
+            log_probs_list = []
+            rewards_list   = []
+
+            with torch.inference_mode(False):  # need gradients for RL
+                for t in range(max_timesteps):
+                    # Prepare inputs
+                    qpos_numpy = np.array(ts.observation['qpos'])
+                    qpos = torch.from_numpy(
+                        pre_process(qpos_numpy)
+                    ).float().cuda().unsqueeze(0)
+                    curr_image = get_image(ts, camera_names)
+
+                    # Sample action from policy
+                    all_actions, log_prob = policy.forward_rl(
+                        qpos, curr_image, instruction=instruction
+                    )
+                    # log_prob: (1, num_queries) — use mean over chunk
+                    log_probs_list.append(log_prob.mean())
+
+                    # Execute first action of chunk (or use temporal agg)
+                    raw_action = all_actions[0, 0].detach().cpu().numpy()
+                    action = post_process(raw_action)
+                    ts = env.step(action)
+
+                    # Store reward
+                    rewards_list.append(ts.reward if ts.reward is not None else 0.0)
+
+            # ── Compute discounted returns ────────────────────────────
+            returns = []
+            G = 0.0
+            for r in reversed(rewards_list):
+                G = r + gamma * G
+                returns.insert(0, G)
+            returns = torch.tensor(returns, dtype=torch.float32).cuda()
+
+            # Normalise returns to reduce variance
+            if returns.std() > 1e-8:
+                returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+            # ── REINFORCE loss ────────────────────────────────────────
+            # Negative because we want to maximise expected return
+            log_probs_tensor = torch.stack(log_probs_list)  # (max_timesteps,)
+            rl_loss = -(log_probs_tensor * returns).mean()
+
+            # ── Update ───────────────────────────────────────────────
+            optimizer.zero_grad()
+            rl_loss.backward()
+            # Clip gradients to prevent instability
+            torch.nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
+            optimizer.step()
+
+            epoch_loss.append(rl_loss.item())
+            epoch_rewards.append(sum(rewards_list))
+
+        # ── Epoch summary ─────────────────────────────────────────────
+        avg_loss   = np.mean(epoch_loss)
+        avg_return = np.mean(epoch_rewards)
+        success_rate = np.mean(
+            [1 if r >= env.task.max_reward else 0
+             for r in epoch_rewards]
+        )
+
+        print(f'RL Epoch {epoch} | '
+              f'Loss: {avg_loss:.4f} | '
+              f'Avg Return: {avg_return:.2f} | '
+              f'Success: {success_rate:.2%}')
+
+        # Save best checkpoint
+        if success_rate > best_success_rate:
+            best_success_rate = success_rate
+            ckpt_path = os.path.join(ckpt_dir, 'policy_rl_best.ckpt')
+            torch.save(policy.state_dict(), ckpt_path)
+            print(f'  → New best saved: {success_rate:.2%}')
+
+        # Periodic checkpoint
+        if epoch % 50 == 0:
+            ckpt_path = os.path.join(ckpt_dir, f'policy_rl_epoch_{epoch}.ckpt')
+            torch.save(policy.state_dict(), ckpt_path)
+
+    return policy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -461,5 +613,11 @@ if __name__ == '__main__':
     parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
     parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
-    
+
+    parser.add_argument('--finetune_rl',  action='store_true')
+    parser.add_argument('--rl_epochs',    type=int,   default=500)
+    parser.add_argument('--rl_rollouts',  type=int,   default=10)
+    parser.add_argument('--rl_lr',        type=float, default=1e-6)
+    parser.add_argument('--gamma',        type=float, default=0.99)
+        
     main(vars(parser.parse_args()))
