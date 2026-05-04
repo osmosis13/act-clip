@@ -121,10 +121,10 @@ def main(args):
 
     if args.get('finetune_rl', False):
         print('\nStarting Phase 2: RL fine-tuning...')
-        config['rl_epochs']   = args.get('rl_epochs', 500)
-        config['rl_rollouts'] = args.get('rl_rollouts', 10)
-        config['rl_lr']       = args.get('rl_lr', 1e-6)
-        config['gamma']       = args.get('gamma', 0.99)
+        config['rl_epochs']   = args['rl_epochs']
+        config['rl_rollouts'] = args['rl_rollouts']
+        config['rl_lr']       = args['rl_lr']
+        config['gamma']       = args['gamma']
         finetune_rl(config, bc_ckpt_name='policy_best.ckpt')
 
 
@@ -615,9 +615,9 @@ if __name__ == '__main__':
     parser.add_argument('--temporal_agg', action='store_true')
 
     parser.add_argument('--finetune_rl',  action='store_true')
-    parser.add_argument('--rl_epochs',    type=int,   default=500)
-    parser.add_argument('--rl_rollouts',  type=int,   default=10)
-    parser.add_argument('--rl_lr',        type=float, default=1e-6)
-    parser.add_argument('--gamma',        type=float, default=0.99)
+    parser.add_argument('--rl_epochs',    action='store', type=int,   default=500)
+    parser.add_argument('--rl_rollouts',  action='store', type=int,   default=10)
+    parser.add_argument('--rl_lr',        action='store', type=float, default=1e-6)
+    parser.add_argument('--gamma',        action='store', type=float, default=0.99)
         
     main(vars(parser.parse_args()))
