@@ -140,24 +140,22 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
 ### env utils
 
 def sample_box_pose():
-    x_range = [0.0, 0.2]
+    x_range = [0.1, 0.2]      # red: right side of table
     y_range = [0.40, 0.50]
     z_range = [0.05, 0.05]
 
     ranges = np.vstack([x_range, y_range, z_range])
     cube_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
     cube_quat = np.array([1, 0, 0, 0])
     return np.concatenate([cube_position, cube_quat])
 
 def sample_blue_box_pose():
-    x_range = [-0.2, 0.0]     # opposite end of table from red (red is 0.0 to 0.2)
-    y_range = [0.40, 0.50]    # same y range as red
-    z_range = [0.05, 0.05]    # same height
+    x_range = [-0.2, -0.1]    # blue: left side of table, clear gap from red
+    y_range = [0.40, 0.50]
+    z_range = [0.05, 0.05]
 
     ranges = np.vstack([x_range, y_range, z_range])
     cube_position = np.random.uniform(ranges[:, 0], ranges[:, 1])
-
     cube_quat = np.array([1, 0, 0, 0])
     return np.concatenate([cube_position, cube_quat])
 
