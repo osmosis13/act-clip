@@ -128,6 +128,10 @@ class DETRVAE(nn.Module):
             src = torch.cat(all_cam_features, axis=3)
             pos = torch.cat(all_cam_pos, axis=3)
 
+            # Inject language into latent before passing to transformer
+            if text_emb is not None:
+                latent_input = latent_input + text_emb   # [bs, hidden_dim] + [bs, hidden_dim]
+
             # Pass raw query_embed (num_queries, hidden_dim) — transformer handles unsqueeze internally
             # Pass text_emb (bs, hidden_dim) separately as lang_token
             hs_all = self.transformer(

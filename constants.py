@@ -49,14 +49,14 @@ SIM_TASK_CONFIGS = {
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_color_scripted',
         'num_episodes': 100,   # 50 red + 50 blue
         'episode_len': 400,
-        'camera_names': ['angle']
+        'camera_names': ['angle', 'top']
     },
 
         'sim_transfer_cube_color_human': {
         'dataset_dir': DATA_DIR + '/sim_transfer_cube_color_human',
         'num_episodes': 100,   # 50 red + 50 blue
         'episode_len': 400,
-        'camera_names': ['angle']
+        'camera_names': ['angle', 'top']
     },
 }
 

@@ -41,9 +41,9 @@ class ACTPolicy(nn.Module):
             
             # instruction is already an embedding tensor [B, 512]
             if instruction is not None:
-                # instruction: [B, 512] from dataset
-                text_emb = instruction.to(actions.device).float()      # [B, 512]
-                text_emb = self.text_proj(text_emb)                    # [B, 256] (hidden_dim)
+                text_emb = instruction.to(actions.device).float()
+                text_emb = torch.nn.functional.normalize(text_emb, dim=-1)
+                text_emb = self.text_proj(text_emb)          # [B, hidden_dim]
             else:
                 text_emb = None
 
