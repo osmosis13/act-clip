@@ -70,6 +70,7 @@ class ACTPolicy(nn.Module):
                     instruction = instruction[0]  # ["transfer cube"] -> "transfer cube"
                 instr_emb = self.clip_encoder.encode(instruction)        # <-- was encode_single
                 instr_emb = instr_emb.unsqueeze(0).to(image.device).float()  # [1, 512]
+                instr_emb = torch.nn.functional.normalize(instr_emb, dim=-1)
                 text_emb = self.text_proj(instr_emb)                         # [1, 512]
             else:
                 text_emb = None
