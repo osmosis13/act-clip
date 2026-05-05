@@ -472,7 +472,7 @@ def finetune_rl(config, bc_ckpt_name):
     rl_lr           = config.get('rl_lr', 1e-6)       # lower than BC lr
     ckpt_dir        = config['ckpt_dir']
     task_name       = config['task_name']
-    max_timesteps   = config['episode_len']
+    max_timesteps   = 200
     camera_names    = config['camera_names']
     instructions    = ['pick up red cube', 'pick up blue cube']
 
@@ -552,6 +552,16 @@ def finetune_rl(config, bc_ckpt_name):
                 G = r + gamma * G
                 returns.insert(0, G)
             returns = torch.tensor(returns, dtype=torch.float32).cuda()
+
+            # Track running mean across rollouts (baseline)
+            if not hasattr(policy, 'return_baseline'):
+                policy.return_baseline = 0.0
+
+            # Subtract baseline before any further normalisation
+            returns = returns - policy.return_baseline
+            policy.return_baseline = (
+                0.95 * policy.return_baseline + 0.05 * returns.mean().item()
+            )
 
             # Normalise returns to reduce variance
             if returns.std() > 1e-8:
