@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import os
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 import pickle
 import argparse
 import matplotlib.pyplot as plt

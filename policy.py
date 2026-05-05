@@ -81,15 +81,14 @@ class ACTPolicy(nn.Module):
         
     def forward_rl(self, qpos, image, instruction=None):
         """
-        Like __call__ inference but returns sampled actions + log_prob.
-        Used during RL rollouts.
+        Returns sampled action (no grad) and log_prob (with grad).
+        Memory-efficient version for RL rollouts.
         """
         env_state = None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
+                                        std=[0.229, 0.224, 0.225])
         image = normalize(image)
 
-        # encode instruction
         if instruction is not None:
             if isinstance(instruction, list):
                 instruction = instruction[0]
@@ -99,15 +98,16 @@ class ACTPolicy(nn.Module):
         else:
             text_emb = None
 
-        # get mean action chunks from decoder
+        # Forward pass to get mean action
         a_mean, _, (_, _) = self.model(qpos, image, env_state, text_emb=text_emb)
-        # a_mean: (1, num_queries, state_dim)
 
-        # sample from Gaussian around mean
-        std = self.log_std.exp().unsqueeze(0).unsqueeze(0)  # (1, 1, state_dim)
-        dist = torch.distributions.Normal(a_mean, std)
-        a_sample = dist.sample()                            # (1, num_queries, state_dim)
-        log_prob = dist.log_prob(a_sample).sum(dim=-1)      # (1, num_queries)
+        # Sample action with gradient ONLY through log_std (not through the heavy CNN/transformer)
+        std = self.log_std.exp().unsqueeze(0).unsqueeze(0)
+        
+        # Detach mean from the computation graph — we only need log_prob gradient through log_std
+        dist = torch.distributions.Normal(a_mean.detach(), std)
+        a_sample = dist.sample()
+        log_prob = dist.log_prob(a_sample).sum(dim=-1)
 
         return a_sample, log_prob
 
