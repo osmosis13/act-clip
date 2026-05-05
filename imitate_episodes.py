@@ -111,13 +111,16 @@ def main(args):
     with open(stats_path, 'wb') as f:
         pickle.dump(stats, f)
 
-    best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info
+    if args['num_epochs'] > 0:
+        best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
+        best_epoch, min_val_loss, best_state_dict = best_ckpt_info
 
-    # save best checkpoint
-    ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
-    torch.save(best_state_dict, ckpt_path)
-    print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
+        # save best checkpoint
+        ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
+        torch.save(best_state_dict, ckpt_path)
+        print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
+    else:
+        print('Skipping BC training (num_epochs=0)')
 
     if args.get('finetune_rl', False):
         print('\nStarting Phase 2: RL fine-tuning...')
