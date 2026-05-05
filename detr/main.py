@@ -64,6 +64,12 @@ def get_args_parser():
     parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
     parser.add_argument('--temporal_agg', action='store_true')
 
+    parser.add_argument('--finetune_rl',  action='store_true')
+    parser.add_argument('--rl_epochs',    action='store', type=int,   default=500)
+    parser.add_argument('--rl_rollouts',  action='store', type=int,   default=10)
+    parser.add_argument('--rl_lr',        action='store', type=float, default=1e-6)
+    parser.add_argument('--gamma',        action='store', type=float, default=0.99)
+
     return parser
 
 
