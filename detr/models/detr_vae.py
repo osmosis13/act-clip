@@ -32,48 +32,40 @@ def get_sinusoid_encoding_table(n_position, d_hid):
 
 
 class DETRVAE(nn.Module):
-    """ This is the DETR module that performs object detection """
-    def __init__(self, backbones, transformer, encoder, state_dim, num_queries, camera_names):
-        """ Initializes the model.
-        Parameters:
-            backbones: torch module of the backbone to be used. See backbone.py
-            transformer: torch module of the transformer architecture. See transformer.py
-            state_dim: robot state dimension of the environment
-            num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
-            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
-        """
+    def __init__(self, transformer, encoder, state_dim, num_queries,
+                 camera_names, clip_encoder):
         super().__init__()
-        self.num_queries = num_queries
-        self.camera_names = camera_names
-        self.transformer = transformer
-        self.encoder = encoder
+        self.num_queries   = num_queries
+        self.camera_names  = camera_names
+        self.transformer   = transformer
+        self.encoder       = encoder
+        self.clip_encoder  = clip_encoder        # shared CLIP model
+        
         hidden_dim = transformer.d_model
+        
+        # Replace ResNet input_proj with CLIP image projection
+        # CLIP ViT-B/32 outputs 512-dim patch features
+        self.image_proj = nn.Linear(512, hidden_dim)    # 512 → hidden_dim
+        
+        # Positional embedding for CLIP patch tokens
+        # ViT-B/32 at 224x224 gives 49 patches
+        self.num_patches = 49
+        self.patch_pos_embed = nn.Embedding(self.num_patches, hidden_dim)
+        
         self.action_head = nn.Linear(hidden_dim, state_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        if backbones is not None:
-            self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1)
-            self.backbones = nn.ModuleList(backbones)
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)
-        else:
-            # input_dim = 14 + 7 # robot_state + env_state
-            self.input_proj_robot_state = nn.Linear(14, hidden_dim)
-            self.input_proj_env_state = nn.Linear(7, hidden_dim)
-            self.pos = torch.nn.Embedding(2, hidden_dim)
-            self.backbones = None
-
-        # encoder extra parameters
-        self.latent_dim = 32 # final size of latent z # TODO tune
-        self.cls_embed = nn.Embedding(1, hidden_dim) # extra cls token embedding
-        self.encoder_action_proj = nn.Linear(14, hidden_dim) # project action to embedding
-        self.encoder_joint_proj = nn.Linear(14, hidden_dim)  # project qpos to embedding
-        self.latent_proj = nn.Linear(hidden_dim, self.latent_dim*2) # project hidden state to latent std, var
-        self.register_buffer('pos_table', get_sinusoid_encoding_table(1+1+num_queries, hidden_dim)) # [CLS], qpos, a_seq
-
-        # decoder extra parameters
-        self.latent_out_proj = nn.Linear(self.latent_dim, hidden_dim) # project latent sample to embedding
-        self.additional_pos_embed = nn.Embedding(2, hidden_dim) # learned position embedding for proprio and latent
+        self.input_proj_robot_state = nn.Linear(14, hidden_dim)
+        
+        self.latent_dim         = 32
+        self.cls_embed          = nn.Embedding(1, hidden_dim)
+        self.encoder_action_proj = nn.Linear(14, hidden_dim)
+        self.encoder_joint_proj  = nn.Linear(14, hidden_dim)
+        self.latent_proj        = nn.Linear(hidden_dim, self.latent_dim * 2)
+        self.register_buffer('pos_table',
+            get_sinusoid_encoding_table(1 + 1 + num_queries, hidden_dim))
+        self.latent_out_proj    = nn.Linear(self.latent_dim, hidden_dim)
+        self.additional_pos_embed = nn.Embedding(2, hidden_dim)
 
     def forward(self, qpos, image, env_state, actions=None, is_pad=None, text_emb=None):
         """
@@ -116,17 +108,38 @@ class DETRVAE(nn.Module):
 
         if self.backbones is not None:
             all_cam_features = []
-            all_cam_pos = []
-            for cam_id, cam_name in enumerate(self.camera_names):
-                features, pos = self.backbones[0](image[:, cam_id])
-                features = features[0]
-                pos = pos[0]
-                all_cam_features.append(self.input_proj(features))
-                all_cam_pos.append(pos)
-
-            proprio_input = self.input_proj_robot_state(qpos)
-            src = torch.cat(all_cam_features, axis=3)
-            pos = torch.cat(all_cam_pos, axis=3)
+            for cam_id in range(len(self.camera_names)):
+                cam_img = image[:, cam_id]                     # [B, 3, H, W]
+                
+                # Resize to 224x224 for CLIP ViT-B/32
+                cam_img_resized = F.interpolate(
+                    cam_img, size=(224, 224), mode='bilinear', align_corners=False
+                )
+                
+                # Get patch tokens from CLIP image encoder
+                patches = self.clip_encoder.encode_image_patches(cam_img_resized)
+                # patches: [B, 49, 512]
+                
+                # Project to hidden_dim
+                patches = self.image_proj(patches)             # [B, 49, hidden_dim]
+                all_cam_features.append(patches)
+            
+            # Concatenate patches from all cameras
+            src = torch.cat(all_cam_features, dim=1)           # [B, 49*num_cams, hidden_dim]
+            
+            # Positional embeddings for patches
+            patch_ids = torch.arange(src.shape[1]).to(src.device)
+            # Simple repeat for multi-camera
+            pos_ids = patch_ids % self.num_patches
+            patch_pos = self.patch_pos_embed(pos_ids)          # [seq, hidden_dim]
+            patch_pos = patch_pos.unsqueeze(0).expand(src.shape[0], -1, -1)
+            
+            # Transpose for transformer: [seq, B, hidden_dim]
+            src = src.permute(1, 0, 2)
+            patch_pos = patch_pos.permute(1, 0, 2)
+            
+            # Proprioception
+            proprio_input = self.input_proj_robot_state(qpos)  # [B, hidden_dim]
 
             # Inject language into latent before passing to transformer
             if text_emb is not None:
@@ -135,9 +148,9 @@ class DETRVAE(nn.Module):
             # Pass raw query_embed (num_queries, hidden_dim) — transformer handles unsqueeze internally
             # Pass text_emb (bs, hidden_dim) separately as lang_token
             hs_all = self.transformer(
-                src, None, self.query_embed.weight, pos,
+                src, None, self.query_embed.weight, patch_pos,
                 latent_input, proprio_input, self.additional_pos_embed.weight,
-                lang_token=text_emb   # (bs, hidden_dim) or None
+                lang_token=text_emb, use_clip_image=True  # (bs, hidden_dim) or None
             )[0]  # take last decoder layer: (bs, 1+num_queries, hidden_dim)
 
             if text_emb is not None:
