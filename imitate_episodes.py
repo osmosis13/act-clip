@@ -16,13 +16,13 @@ from utils import sample_box_pose, sample_blue_box_pose, sample_insertion_pose #
 from utils import compute_dict_mean, set_seed, detach_dict # helper functions
 from policy import ACTPolicy, CNNMLPPolicy
 from visualize_episodes import save_videos
-from clip_encoder import CLIPTextEncoder
+from clip_encoder import CLIPDualEncoder
 
 from sim_env import BOX_POSE, BLUE_BOX_POSE
 
 import IPython
 e = IPython.embed
-clip_encoder = CLIPTextEncoder()
+clip_encoder = CLIPDualEncoder()
 
 def main(args):
     set_seed(1)

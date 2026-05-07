@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import torchvision.transforms as transforms
-from clip_encoder import CLIPTextEncoder
+from clip_encoder import CLIPDualEncoder
 
 from detr.main import build_ACT_model_and_optimizer, build_CNNMLP_model_and_optimizer
 import IPython
@@ -20,7 +20,7 @@ class ACTPolicy(nn.Module):
         )
 
         # CLIP integration
-        self.clip_encoder = CLIPTextEncoder()
+        self.clip_encoder = CLIPDualEncoder()
         self.text_dim = 512
         
         # Get hidden_dim from DETR model 
@@ -68,7 +68,7 @@ class ACTPolicy(nn.Module):
                 # instruction is a string at inference
                 if isinstance(instruction, list):
                     instruction = instruction[0]  # ["transfer cube"] -> "transfer cube"
-                instr_emb = self.clip_encoder.encode(instruction)        # <-- was encode_single
+                instr_emb = self.clip_encoder.encode_text(instruction) 
                 instr_emb = instr_emb.unsqueeze(0).to(image.device).float()  # [1, 512]
                 instr_emb = torch.nn.functional.normalize(instr_emb, dim=-1)
                 text_emb = self.text_proj(instr_emb)                         # [1, 512]
@@ -93,7 +93,7 @@ class ACTPolicy(nn.Module):
         if instruction is not None:
             if isinstance(instruction, list):
                 instruction = instruction[0]
-            instr_emb = self.clip_encoder.encode(instruction)
+            instr_emb = self.clip_encoder.encode_text(instruction)
             instr_emb = instr_emb.unsqueeze(0).to(image.device).float()
             text_emb = self.text_proj(instr_emb)
         else:

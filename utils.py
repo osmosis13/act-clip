@@ -4,7 +4,7 @@ import torch
 import os
 import h5py
 from torch.utils.data import TensorDataset, DataLoader
-from clip_encoder import CLIPTextEncoder
+from clip_encoder import CLIPDualEncoder
 
 import IPython
 e = IPython.embed
@@ -16,7 +16,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
-        self.clip_encoder = CLIPTextEncoder()
+        self.clip_encoder = CLIPDualEncoder()
         self.is_sim = None
         self.__getitem__(0) # initialize self.is_sim
 
@@ -79,7 +79,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
         # CLIP language conditioning
         try:
             instruction = root['instruction'][()].decode('utf-8')
-            instruction_emb = self.clip_encoder.encode(instruction).cpu().numpy()
+            instruction_emb = self.clip_encoder.encode_text(instruction).cpu().numpy()
         except KeyError:
             instruction_emb = np.zeros(512, dtype=np.float32)
 
