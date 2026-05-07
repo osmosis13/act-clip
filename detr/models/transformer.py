@@ -58,7 +58,6 @@ class Transformer(nn.Module):
             if lang_token is not None:
                 # lang_token: (bs, hidden_dim) from detr_vae
                 lang_token = lang_token.unsqueeze(0)               # (1, bs, hidden_dim)
-                lang_pos   = torch.zeros_like(lang_token)          # learned-zero pos for lang
                 query_embed = torch.cat([lang_token, query_embed], dim=0)  # (1+num_queries, bs, hidden_dim)
 
             additional_pos_embed = additional_pos_embed.unsqueeze(1).repeat(1, bs, 1)

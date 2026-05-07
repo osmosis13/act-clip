@@ -5,6 +5,7 @@ DETR model and criterion classes.
 import torch
 from torch import nn
 from torch.autograd import Variable
+from torch.nn import functional as F
 from .backbone import build_backbone
 from .transformer import build_transformer, TransformerEncoder, TransformerEncoderLayer
 
@@ -106,7 +107,7 @@ class DETRVAE(nn.Module):
             latent_sample = torch.zeros([bs, self.latent_dim], dtype=torch.float32).to(qpos.device)
             latent_input = self.latent_out_proj(latent_sample)
 
-        if self.backbones is not None:
+        if self.clip_encoder is not None:
             all_cam_features = []
             for cam_id in range(len(self.camera_names)):
                 cam_img = image[:, cam_id]                     # [B, 3, H, W]
@@ -257,29 +258,27 @@ def build_encoder(args):
 def build(args):
     state_dim = 14 # TODO hardcode
 
-    # From state
-    # backbone = None # from state for now, no need for conv nets
-    # From image
-    backbones = []
-    backbone = build_backbone(args)
-    backbones.append(backbone)
+    # Remove ResNet backbone — no longer needed
+    # backbones = []  ← delete this
 
     transformer = build_transformer(args)
+    encoder     = build_encoder(args)
 
-    encoder = build_encoder(args)
+    # Build CLIP dual encoder
+    from clip_encoder import CLIPDualEncoder
+    clip_enc = CLIPDualEncoder(freeze=True)
 
     model = DETRVAE(
-        backbones,
-        transformer,
-        encoder,
+        transformer=transformer,
+        encoder=encoder,
         state_dim=state_dim,
         num_queries=args.num_queries,
         camera_names=args.camera_names,
+        clip_encoder=clip_enc,           # ← pass clip encoder
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("number of parameters: %.2fM" % (n_parameters/1e6,))
-
     return model
 
 def build_cnnmlp(args):
