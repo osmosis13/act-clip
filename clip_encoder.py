@@ -33,6 +33,9 @@ class CLIPDualEncoder(nn.Module):
         # Hook into the ViT to get intermediate patch tokens
         # rather than the final pooled embedding
         visual = self.model.visual
+
+        # Convert input to match CLIP's weight dtype (float16 on CUDA)
+        image = image.to(dtype=visual.conv1.weight.dtype) 
         
         x = visual.conv1(image)                               # [B, 768, 7, 7]
         x = x.reshape(x.shape[0], x.shape[1], -1)            # [B, 768, 49]
