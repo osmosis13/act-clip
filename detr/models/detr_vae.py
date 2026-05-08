@@ -135,10 +135,6 @@ class DETRVAE(nn.Module):
             patch_pos = self.patch_pos_embed(pos_ids)          # [seq, hidden_dim]
             patch_pos = patch_pos.unsqueeze(0).expand(src.shape[0], -1, -1)
             
-            # Transpose for transformer: [seq, B, hidden_dim]
-            src = src.permute(1, 0, 2)
-            patch_pos = patch_pos.permute(1, 0, 2)
-            
             # Proprioception
             proprio_input = self.input_proj_robot_state(qpos)  # [B, hidden_dim]
 

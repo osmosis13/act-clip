@@ -66,7 +66,6 @@ class Transformer(nn.Module):
             addition_input = torch.stack([latent_input, proprio_input], axis=0)
             src = torch.cat([addition_input, src], axis=0)
         elif use_clip_image:
-            # ── CLIP image path (new) ───────────────────────────────────────
             # src arrives as [B, num_patches, hidden_dim] from detr_vae
             # after image_proj — need to permute to [num_patches, B, hidden_dim]
             bs = src.shape[0]
