@@ -48,6 +48,7 @@ class CLIPDualEncoder(nn.Module):
         
         x = x + visual.positional_embedding                  # add pos encoding
         x = visual.ln_pre(x)
+        x = x.to(dtype=visual.conv1.weight.dtype)            # ensure same dtype for transformer
         x = x.permute(1, 0, 2)                               # [seq, B, 768]
         x = visual.transformer(x)
         x = x.permute(1, 0, 2)                               # [B, seq, 768]
