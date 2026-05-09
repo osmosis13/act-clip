@@ -19,7 +19,7 @@ class CLIPDualEncoder(nn.Module):
         if unfreeze_last_n_blocks > 0:
             # Convert entire visual encoder to float32 FIRST
             # — float16 gradients overflow (max 65504), causing NaN on first backward
-            self.model.visual.float()
+            self.model.float()
 
             total_blocks = len(self.model.visual.transformer.resblocks)
             for i in range(total_blocks - unfreeze_last_n_blocks, total_blocks):
