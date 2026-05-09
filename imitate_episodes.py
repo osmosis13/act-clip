@@ -406,6 +406,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             # backward
             loss = forward_dict['loss']
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)
             optimizer.step()
             optimizer.zero_grad()
             train_history.append(detach_dict(forward_dict))
