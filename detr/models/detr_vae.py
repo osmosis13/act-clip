@@ -8,6 +8,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from .backbone import build_backbone
 from .transformer import build_transformer, TransformerEncoder, TransformerEncoderLayer
+from clip_encoder import CLIPDualEncoder
 
 import numpy as np
 
@@ -261,8 +262,7 @@ def build(args):
     encoder     = build_encoder(args)
 
     # Build CLIP dual encoder
-    from clip_encoder import CLIPDualEncoder
-    clip_enc = CLIPDualEncoder(freeze=True)
+    clip_enc = CLIPDualEncoder(freeze=True, unfreeze_last_n_blocks=2)
 
     model = DETRVAE(
         transformer=transformer,

@@ -3,26 +3,36 @@ import clip
 import torch.nn as nn
 
 class CLIPDualEncoder(nn.Module):
-    def __init__(self, device=None, freeze=True):
+    def __init__(self, device=None, freeze=True, unfreeze_last_n_blocks=0):  # add param
         super().__init__()
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.model, self.preprocess = clip.load("ViT-B/32", device=self.device)
         self.model.eval()
-
-        # ViT-B/32 image encoder output
-        self.image_dim = 512    # CLIP joint embedding dim
+        self.image_dim = 512
         self.text_dim  = 512
-        self.patch_size = 32    # ViT-B/32 divides image into 32x32 patches
-        
+        self.patch_size = 32
+
         if freeze:
             for param in self.model.parameters():
                 param.requires_grad = False
 
-    @torch.no_grad()
+        # Selectively unfreeze last N visual transformer blocks
+        if unfreeze_last_n_blocks > 0:
+            total_blocks = len(self.model.visual.transformer.resblocks)
+            for i in range(total_blocks - unfreeze_last_n_blocks, total_blocks):
+                for param in self.model.visual.transformer.resblocks[i].parameters():
+                    param.requires_grad = True
+            # Also unfreeze final norm and projection
+            self.model.visual.ln_post.weight.requires_grad = True
+            self.model.visual.ln_post.bias.requires_grad = True
+            if self.model.visual.proj is not None:
+                self.model.visual.proj.requires_grad = True
+
+    # Remove @torch.no_grad() so gradients can flow through text_proj during training
     def encode_text(self, text: str) -> torch.Tensor:
         tokens   = clip.tokenize([text], truncate=True).to(self.device)
         text_emb = self.model.encode_text(tokens)
-        return text_emb.squeeze(0).float()                    # [512]
+        return text_emb.squeeze(0).float()
 
     def encode_image_patches(self, image: torch.Tensor) -> torch.Tensor:
         """

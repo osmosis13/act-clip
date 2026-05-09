@@ -78,41 +78,22 @@ class ACTPolicy(nn.Module):
                 qpos, image, env_state, text_emb=text_emb
                 )
             return a_hat
-        
-    def forward_rl(self, qpos, image, instruction=None):
-        """
-        Returns sampled action (no grad) and log_prob (with grad).
-        Memory-efficient version for RL rollouts.
-        """
-        env_state = None
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                        std=[0.229, 0.224, 0.225])
-        image = normalize(image)
-
-        if instruction is not None:
-            if isinstance(instruction, list):
-                instruction = instruction[0]
-            instr_emb = self.model.clip_encoder.encode_text(instruction)
-            instr_emb = instr_emb.unsqueeze(0).to(image.device).float()
-            text_emb = self.text_proj(instr_emb)
-        else:
-            text_emb = None
-
-        # Forward pass to get mean action
-        a_mean, _, (_, _) = self.model(qpos, image, env_state, text_emb=text_emb)
-
-        # Sample action with gradient ONLY through log_std (not through the heavy CNN/transformer)
-        std = self.log_std.exp().unsqueeze(0).unsqueeze(0)
-        
-        # Detach mean from the computation graph — we only need log_prob gradient through log_std
-        dist = torch.distributions.Normal(a_mean.detach(), std)
-        a_sample = dist.sample()
-        log_prob = dist.log_prob(a_sample).sum(dim=-1)
-
-        return a_sample, log_prob
 
     def configure_optimizers(self):
-        return self.optimizer
+        # Split into two param groups: CLIP visual blocks get 10x lower LR
+        clip_params = [
+            p for n, p in self.named_parameters()
+            if 'clip_encoder' in n and p.requires_grad
+        ]
+        other_params = [
+            p for n, p in self.named_parameters()
+            if 'clip_encoder' not in n and p.requires_grad
+        ]
+        optimizer = torch.optim.AdamW([
+            {'params': other_params},                          # uses default lr set in optimizer
+            {'params': clip_params, 'lr': self.optimizer.param_groups[0]['lr'] * 0.1},
+        ], lr=self.optimizer.param_groups[0]['lr'])
+        return optimizer
 
 
 class CNNMLPPolicy(nn.Module):
