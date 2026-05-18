@@ -1,15 +1,16 @@
-# ACT-CLIP: Action Chunking Transformer with CLIP implementation
+# ACT-CLIP: Language-Conditioned Action Chunking Transformer with CLIP
 
-#### This project is based on: https://tonyzhaozh.github.io/aloha/
+#### This repository extends the Action Chunking Transformer (ACT) developed by Zhao et al. (https://tonyzhaozh.github.io/aloha/), by integrating CLIP ViT-B/32 as a visual-language backbone, enabling bimanual robotic manipulation conditioned on natural language instructions. The system is evaluated in the MuJoCo ALOHA simulation environment on a colour-conditioned cube transfer task.
 
 ### Repo Structure
 - ``imitate_episodes.py`` Train and Evaluate ACT
-- ``policy.py`` An adaptor for ACT policy
+- ``policy.py`` ACTPolicy adaptor with CLIP text encoding and dual language injection
+- ``clip_encoder.py`` CLIPDualEncoder — frozen CLIP text and image patch encoder
 - ``detr`` Model definitions of ACT, modified from DETR
 - ``sim_env.py`` Mujoco + DM_Control environments with joint space control
 - ``ee_sim_env.py`` Mujoco + DM_Control environments with EE space control
 - ``scripted_policy.py`` Scripted policies for sim environments
-- ``constants.py`` Constants shared across files
+- ``constants.py`` Constants and task configurations
 - ``utils.py`` Utils such as data loading and helper functions
 - ``visualize_episodes.py`` Save videos from a .hdf5 dataset
 
@@ -44,34 +45,58 @@ To set up a new terminal, run:
     conda activate aloha
     cd <path to act repo>
 
-### Simulated experiments
+### Dataset Collection
 
-We use ``sim_transfer_cube_scripted`` task in the examples below. Another option is ``sim_insertion_scripted``.
-To generated 50 episodes of scripted data, run:
+We use ``sim_transfer_cube_color_scripted`` task in the examples below. To collect 200 demonstrations (101 red, 99 blue):
 
     python3 record_sim_episodes.py \
-    --task_name sim_transfer_cube_scripted \
+    --task_name sim_transfer_cube_color_scripted \
     --dataset_dir <data save dir> \
-    --num_episodes 50
+    --num_episodes 200
 
-To can add the flag ``--onscreen_render`` to see real-time rendering.
+You can add the flag ``--onscreen_render`` to see real-time rendering.
 To visualize the episode after it is collected, run
 
     python3 visualize_episodes.py --dataset_dir <data save dir> --episode_idx 0
 
 To train ACT:
     
-    # Transfer Cube task
+    # Transfer Cube Color task
     python3 imitate_episodes.py \
-    --task_name sim_transfer_cube_scripted \
+    --task_name sim_transfer_cube_color_scripted \
     --ckpt_dir <ckpt dir> \
-    --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
-    --num_epochs 2000  --lr 1e-5 \
+    --policy_class ACT --kl_weight 10 --chunk_size 50 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+    --num_epochs 3000  --lr 1e-5 \
     --seed 0
 
-
-To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
-The success rate should be around 90% for transfer cube, and around 50% for insertion.
 To enable temporal ensembling, add flag ``--temporal_agg``.
+To evaluate the policy, run the same command but add ``--eval``. This loads the best validation checkpoint.
+During evaluation, the terminal will prompt for the instruction:
+
+    ========================================
+    INSTRUCTION QUERY
+      1  →  pick up red cube
+      2  →  pick up blue cube
+      or type a custom instruction
+    Enter choice:
+
+The policy runs 50 rollouts per evaluation and reports:
+
+    Success rate: 0.XX
+    Reward >= 1: XX/50
+    Reward >= 2: XX/50
+    Reward >= 3: XX/50
+    Reward >= 4: XX/50
+
 Videos will be saved to ``<ckpt_dir>`` for each rollout.
 You can also add ``--onscreen_render`` to see real-time rendering during evaluation.
+Task parameters are defined in constants.py. Ensure the following entry exists:
+
+    'sim_transfer_cube_color_scripted': {
+    'dataset_dir': DATA_DIR + '/sim_transfer_cube_color_scripted',
+    'num_episodes': 200,
+    'episode_len': 400,
+    'camera_names': ['angle', 'top']
+    },
+
+Update DATA_DIR at the top of constants.py to point to your data directory.
