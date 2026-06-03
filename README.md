@@ -57,12 +57,12 @@ Edit ``constants.py`` to match your directory:
 
     DATA_DIR = "/path/to/datasets"
 
-### Example Usages
+### Environment Setup
 
 To set up a new terminal, run:
 
     conda activate aloha
-    cd <path to act repo>
+    cd <path to act-clip repo>
 
 ### Dataset Collection
 
