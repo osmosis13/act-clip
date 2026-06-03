@@ -1,6 +1,6 @@
 # ACT-CLIP: Language-Conditioned Action Chunking Transformer with CLIP
 
-#### This repository extends the Action Chunking Transformer (ACT) developed by Zhao et al. (https://tonyzhaozh.github.io/aloha/), by integrating CLIP ViT-B/32 as a visual-language backbone, enabling bimanual robotic manipulation conditioned on natural language instructions. The system is evaluated in the MuJoCo ALOHA simulation environment on a colour-conditioned cube transfer task.
+#### This repository extends the Action Chunking Transformer (ACT) developed by Zhao et al. (https://tonyzhaozh.github.io/aloha/), by integrating CLIP ViT-B/32 as a visual-language backbone, enabling bimanual robotic manipulation conditioned on natural language instructions. The system is evaluated in the MuJoCo ALOHA simulation environment on a colour-conditioned cube transfer task, where the robot must transfer either a red or blue cube based on a natural language instruction.
 
 ### Repo Structure
 - ``imitate_episodes.py`` Train and Evaluate ACT
@@ -14,6 +14,15 @@
 - ``utils.py`` Utils such as data loading and helper functions
 - ``visualize_episodes.py`` Save videos from a .hdf5 dataset
 
+### System Requirements
+
+Tested on:
+- Ubuntu 22.04
+- Python 3.8.10
+- CUDA-capable NVIDIA GPU
+- PyTorch
+- MuJoCo 2.3.7
+- DM-Control 1.0.14
 
 ### Installation
 
@@ -36,7 +45,17 @@
     pip install ftfy regex tqdm
     pip install git+https://github.com/openai/CLIP.git
     pip install sentencepiece
-    cd act-clip/detr && pip install -e .
+
+## ACT Components 
+
+    cd act-clip/detr
+    pip install -e .
+
+### Configure Dataset Directory
+
+Edit ``constants.py`` to match your directory:
+
+    DATA_DIR = "/path/to/datasets"
 
 ### Example Usages
 
@@ -99,4 +118,26 @@ Task parameters are defined in constants.py. Ensure the following entry exists:
     'camera_names': ['angle', 'top']
     },
 
-Update DATA_DIR at the top of constants.py to point to your data directory.
+### CLIP Configurations
+
+The CLIP encoder configuration is defined in:
+
+``detr/models/detr_vae.py``
+
+within the `build()` function.
+
+Curently the configuration is set to unfreeze the last 2 transformer blocks of the ViT-B/32, with a reduced learning rate of 1e-6 instead of the current 1e-5 used in the erst fo the model. You can change the configuration to fully frozen ViT CLIP parameters by changing this parameter:
+
+    clip_enc = CLIPDualEncoder(freeze=True, unfreeze_last_n_blocks=2)
+
+and set ``unfreeze_last_n_blocks`` to ``0``.
+
+### Acknowledgements
+
+This repository builds upon the Action Chunking Transformer (ACT) framework developed by Zhao et al.:
+
+https://tonyzhaozh.github.io/aloha/
+
+CLIP was developed by OpenAI:
+
+https://github.com/openai/CLIP
