@@ -131,6 +131,7 @@ Curently the configuration is set to unfreeze the last 2 transformer blocks of t
     clip_enc = CLIPDualEncoder(freeze=True, unfreeze_last_n_blocks=2)
 
 and set ``unfreeze_last_n_blocks`` to ``0``.
+Unfortunately, the ResNet-18 configuration was changed due to the modifications made to accomodate CLIP visual encoder. If you're interested in checking out ACT with ResNet-18 as the primary visual encoder, check out the original ACT framework by Tony Zhao from the links below.
 
 ### Acknowledgements
 
