@@ -2,6 +2,8 @@
 
 #### This repository extends the Action Chunking Transformer (ACT) developed by Zhao et al. (https://tonyzhaozh.github.io/aloha/), by integrating CLIP ViT-B/32 as a visual-language backbone, enabling bimanual robotic manipulation conditioned on natural language instructions. The system is evaluated in the MuJoCo ALOHA simulation environment on a colour-conditioned cube transfer task, where the robot must transfer either a red or blue cube based on a natural language instruction.
 
+#### The work was developed as part of a final-year MEng Computer Systems Engineering dissertation project at the University of Sheffield. The aforementioned dissertation can be accessed through this link: https://drive.google.com/file/d/1lsPon4wXo0IcnQC38Vi3Dr4FyZG0YzPu/view?usp=sharing
+
 ### Repo Structure
 - ``imitate_episodes.py`` Train and Evaluate ACT
 - ``policy.py`` ACTPolicy adaptor with CLIP text encoding and dual language injection
